@@ -143,11 +143,14 @@ function HomeContent() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="relative">
                     <textarea
+                      id="prompt-input"
+                      name="prompt"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       placeholder="Describe your business idea, and our AI agents will build your website autonomously..."
                       className="input-modern min-h-32 resize-none font-medium"
                       disabled={loading}
+                      autoComplete="off"
                     />
                     <div className="text-xs text-gray-500 mt-2 flex justify-between">
                       <span>{prompt.length} characters</span>

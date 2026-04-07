@@ -5,7 +5,7 @@ const config: Config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  darkMode: ['class', 'class'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -18,28 +18,6 @@ const config: Config = {
       backgroundColor: {
         'gradient-start': '#0d0d0d',
         'gradient-end': '#1a1a1a',
-      },
-      backdropBlur: {
-        xs: '2px',
-      },
-      animation: {
-        'fade-in': 'fadeIn 0.3s ease-in-out',
-        'slide-in': 'slideIn 0.3s ease-out',
-        'pulse-subtle': 'pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideIn: {
-          '0%': { transform: 'translateY(10px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        'pulse-subtle': {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.8' },
-        },
       },
     },
   },
