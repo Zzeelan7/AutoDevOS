@@ -1,0 +1,38 @@
+"""
+Alembic environment configuration
+"""
+import os
+from logging.config import fileConfig
+from sqlalchemy import engine_from_config, pool
+from alembic import context
+
+config = context.config
+fileConfig(config.config_file_name)
+
+target_metadata = None  # Will be set by user
+
+
+def run_migrations_offline() -> None:
+    """Run migrations 'offline'."""
+    url = os.getenv("DATABASE_URL", "postgresql://autodevos:devpass123@localhost:5432/autodevos")
+    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations 'online'."""
+    url = os.getenv("DATABASE_URL", "postgresql://autodevos:devpass123@localhost:5432/autodevos")
+    config.set_main_option("sqlalchemy.url", url)
+    connectable = engine_from_config(config.get_section(config.config_prefix), prefix="sqlalchemy.", poolclass=pool.NullPool)
+
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

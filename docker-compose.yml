@@ -1,0 +1,108 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    volumes:
+      - ./generated_sites:/app/public/generated_sites:ro
+    depends_on:
+      - backend
+    networks:
+      - autodevos
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://autodevos:devpass123@postgres:5432/autodevos
+      REDIS_URL: redis://redis:6379
+      CHROMA_URL: http://chroma:8001
+      SANDBOX_URL: http://sandbox:9000
+      OLLAMA_URL: http://172.28.48.1:11434
+      OLLAMA_MODEL: llama3
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      NUM_CPU: 4
+      NUM_GPU: 1
+    volumes:
+      - ./generated_sites:/app/generated_sites
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - redis
+      - chroma
+    networks:
+      - autodevos
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autodevos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass123}
+      POSTGRES_DB: ${POSTGRES_DB:-autodevos}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autodevos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autodevos
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autodevos
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    networks:
+      - autodevos
+
+  sandbox:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./generated_sites:/app/generated_sites:ro
+    environment:
+      NODE_ENV: production
+    networks:
+      - autodevos
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+
+networks:
+  autodevos:
+    driver: bridge
