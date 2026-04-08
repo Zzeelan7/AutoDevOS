@@ -21,19 +21,19 @@ def test_imports():
             Reward,
             WebsiteGenerationEnv,
         )
-        print("  ✓ Pydantic models imported")
+        print("  [OK] Pydantic models imported")
     except Exception as e:
-        print(f"  ✗ Failed to import Pydantic models: {e}")
+        print(f"  [FAIL] Failed to import Pydantic models: {e}")
         return False
     
     try:
         import inference
-        print("  ✓ inference.py imports")
+        print("  [OK] inference.py imports")
     except ImportError as e:
-        print(f"  ✗ Failed to import inference.py: {e}")
+        print(f"  [FAIL] Failed to import inference.py: {e}")
         return False
     
-    print("✓ All imports successful\n")
+    print("[OK] All imports successful\n")
     return True
 
 
@@ -45,22 +45,22 @@ def test_environment():
         from openenv_env import WebsiteGenerationEnv  # type: ignore
         
         env = WebsiteGenerationEnv(task_type="simple_landing_page")
-        print(f"  ✓ Environment created for task: simple_landing_page")
+        print(f"  [OK] Environment created for task: simple_landing_page")
         
         # Check environment has required methods
         required_methods = ['reset', 'step', 'state']
         for method in required_methods:
             if not hasattr(env, method):
-                print(f"  ✗ Environment missing method: {method}")
+                print(f"  [FAIL] Environment missing method: {method}")
                 return False
             else:
-                print(f"  ✓ Method {method} exists")
+                print(f"  [OK] Method {method} exists")
         
     except Exception as e:
-        print(f"  ✗ Failed to instantiate environment: {e}")
+        print(f"  [FAIL] Failed to instantiate environment: {e}")
         return False
     
-    print("✓ Environment instantiation successful\n")
+    print("[OK] Environment instantiation successful\n")
     return True
 
 
@@ -75,7 +75,7 @@ async def test_environment_async():
         
         # Test reset
         reset_response = await env.reset()
-        print(f"  ✓ reset() returned: Observation with {len(reset_response.observation.task_description)} chars description")
+        print(f"  [OK] reset() returned: Observation with {len(reset_response.observation.task_description)} chars description")
         
         # Test step
         action = Action(
@@ -85,19 +85,19 @@ async def test_environment_async():
             reasoning="Initial submission"
         )
         step_response = await env.step(action)
-        print(f"  ✓ step() returned: Reward score = {step_response.reward.total_score:.2f}")
+        print(f"  [OK] step() returned: Reward score = {step_response.reward.total_score:.2f}")
         
         # Test state
         state = await env.state()
-        print(f"  ✓ state() returned: {list(state.keys())}")
+        print(f"  [OK] state() returned: {list(state.keys())}")
         
     except Exception as e:
-        print(f"  ✗ Async test failed: {e}")
+        print(f"  [FAIL] Async test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
     
-    print("✓ Async methods working\n")
+    print("[OK] Async methods working\n")
     return True
 
 
@@ -115,7 +115,7 @@ def test_models():
             js="",
             reasoning="Test action"
         )
-        print(f"  ✓ Action model valid")
+        print(f"  [OK] Action model valid")
         
         # Test Observation creation
         obs = Observation(
@@ -131,7 +131,7 @@ def test_models():
             last_feedback={},
             done=False,
         )
-        print(f"  ✓ Observation model valid")
+        print(f"  [OK] Observation model valid")
         
         # Test Reward creation
         reward = Reward(
@@ -146,15 +146,15 @@ def test_models():
             has_interactivity=False,
             progress_delta=0.0,
         )
-        print(f"  ✓ Reward model valid")
+        print(f"  [OK] Reward model valid")
         
     except Exception as e:
-        print(f"  ✗ Model validation failed: {e}")
+        print(f"  [FAIL] Model validation failed: {e}")
         import traceback
         traceback.print_exc()
         return False
     
-    print("✓ Pydantic models valid\n")
+    print("[OK] Pydantic models valid\n")
     return True
 
 
@@ -181,23 +181,23 @@ async def main():
                 result = test_func()
             results[test_name] = result
         except Exception as e:
-            print(f"✗ {test_name} test failed: {e}")
+            print(f"[FAIL] {test_name} test failed: {e}")
             results[test_name] = False
     
     print("=" * 60)
     print("Validation Results")
     print("=" * 60)
     for test_name, result in results.items():
-        status = "✓ PASS" if result else "✗ FAIL"
+        status = "[OK] PASS" if result else "[FAIL] FAIL"
         print(f"{status}: {test_name}")
     
     print()
     all_pass = all(results.values())
     if all_pass:
-        print("✓ All validation tests passed! Ready for submission.")
+        print("[OK] All validation tests passed! Ready for submission.")
         return 0
     else:
-        print("✗ Some tests failed. Please fix issues before submitting.")
+        print("[FAIL] Some tests failed. Please fix issues before submitting.")
         return 1
 
 
