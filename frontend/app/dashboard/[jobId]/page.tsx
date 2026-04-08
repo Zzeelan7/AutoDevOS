@@ -9,6 +9,7 @@ interface JobData {
   jobId: string;
   prompt: string;
   status: string;
+  degraded?: boolean;
   iterations: number;
   current_iteration: number;
   overall_reward: number;
@@ -59,28 +60,39 @@ export default function JobDashboard() {
     return () => clearInterval(interval);
   }, [jobId]);
 
-  // Fetch website preview when job is completed or at intervals
+  // Fetch website preview - only poll when job is active
   useEffect(() => {
+    if (!job || previewUrl) return; // Stop polling if preview found or no job
+    
+    // Only poll if job is processing or completed with results
+    const shouldPoll = job.status === 'processing' || job.status === 'running' || job.status === 'completed' || job.status === 'degraded';
+    if (!shouldPoll) return;
+
     const fetchPreview = async () => {
       if (!jobId) return;
       
       try {
-        const res = await fetch(`http://localhost:8000/api/jobs/${jobId}/preview`);
+        const res = await fetch(`http://localhost:8000/api/jobs/${jobId}/preview`, { 
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
         if (res.ok) {
           setPreviewUrl(`http://localhost:8000/api/jobs/${jobId}/preview`);
-        } else {
-          setPreviewUrl(null);
         }
       } catch (err) {
-        setPreviewUrl(null);
+        // Silent fail - preview not ready yet
       }
     };
 
-    const interval = setInterval(fetchPreview, 5000);
-    fetchPreview();
+    // Poll less frequently to avoid console spam
+    const pollInterval = job.status === 'processing' ? 3000 : 5000;
+    const timeout = setTimeout(fetchPreview, 500); // Try once immediately
+    const interval = setInterval(fetchPreview, pollInterval);
     
-    return () => clearInterval(interval);
-  }, [jobId]);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [jobId, job, previewUrl]);
 
   // WebSocket connection
   useEffect(() => {
@@ -129,8 +141,8 @@ export default function JobDashboard() {
     
     let progress = iterationProgress + agentInIterationProgress + eventWeight;
     
-    if (job.status === 'completed') return 100;
-    if (job.status === 'error') return Math.min(progress, 100);
+    if (job.status === 'completed' || job.status === 'degraded') return 100;
+    if (job.status === 'error' || job.status === 'failed') return Math.min(progress, 100);
     
     return Math.min(progress, 95);
   };
@@ -151,7 +163,12 @@ export default function JobDashboard() {
       return `${agentLabel} Agent${lastReward ? ` — Score: ${lastReward.toFixed(1)}/10` : ''}`;
     }
     
-    return job.status === 'queued' ? 'Queued — Waiting to start...' : job.status;
+    if (job.status === 'queued') {
+      const hasRetryEvent = events.some((e) => e.type === 'job_retry_scheduled');
+      return hasRetryEvent ? 'Retry queued — Waiting for provider recovery...' : 'Queued — Waiting to start...';
+    }
+
+    return job.status;
   };
 
   if (loading) {
@@ -232,8 +249,10 @@ export default function JobDashboard() {
                   className={`h-full transition-all duration-300 rounded-full ${
                     job?.status === 'completed'
                       ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
-                      : job?.status === 'error'
+                      : (job?.status === 'error' || job?.status === 'failed')
                       ? 'bg-gradient-to-r from-red-500 to-red-400'
+                      : job?.status === 'degraded'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-400'
                       : 'bg-gradient-to-r from-cyan-500 to-blue-500'
                   }`}
                   style={{ width: `${progress}%` }}
@@ -248,11 +267,13 @@ export default function JobDashboard() {
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                   : job?.status === 'completed'
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : job?.status === 'error'
+                  : job?.status === 'degraded'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : (job?.status === 'error' || job?.status === 'failed')
                   ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                   : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
               }`}>
-                {job?.status === 'running' ? '🔄' : job?.status === 'completed' ? '✅' : job?.status === 'error' ? '❌' : '⏳'} {' '}
+                {job?.status === 'running' ? '🔄' : job?.status === 'completed' ? '✅' : job?.status === 'degraded' ? '⚠️' : (job?.status === 'error' || job?.status === 'failed') ? '❌' : '⏳'} {' '}
                 {job?.status.charAt(0).toUpperCase() + job?.status.slice(1)}
               </div>
 
@@ -332,8 +353,12 @@ export default function JobDashboard() {
                       {event.type === 'reward' && <span className="text-emerald-400">⭐</span>}
                       {event.type === 'agent_log' && <span className="text-cyan-400">●</span>}
                       {event.type === 'error' && <span className="text-red-400">✕</span>}
+                      {event.type === 'job_error' && <span className="text-red-400">✕</span>}
+                      {event.type === 'job_retry_scheduled' && <span className="text-amber-400">↻</span>}
                       {event.type === 'job_started' && <span className="text-blue-400">▶</span>}
                       {event.type === 'job_completed' && <span className="text-emerald-400">✓</span>}
+                      {event.type === 'job_done' && <span className="text-emerald-400">✓</span>}
+                      {event.type === 'job_degraded' && <span className="text-amber-400">⚠</span>}
                     </div>
                     <div className="flex-grow min-w-0 text-sm">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">

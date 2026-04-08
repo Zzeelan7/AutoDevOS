@@ -21,10 +21,123 @@ class DeveloperAgent(BaseAgent):
             rl_engine=rl_engine,
         )
 
+    def _extract_profile(self, spec: str) -> dict:
+        """Extract key content hints from spec to avoid generic fallback output."""
+        profile = {
+            "name": "Generated Website",
+            "headline": "Build something your users actually want",
+            "subheadline": "A tailored experience based on your prompt.",
+            "cta": "Get Started",
+            "features": [
+                "Clear value proposition",
+                "Responsive design",
+                "Conversion-focused sections",
+            ],
+        }
+
+        lines = [line.strip() for line in spec.splitlines() if line.strip()]
+        for line in lines:
+            lower = line.lower()
+            if lower.startswith("project name") and ":" in line:
+                profile["name"] = line.split(":", 1)[1].strip() or profile["name"]
+            elif lower.startswith("business category") and ":" in line:
+                category = line.split(":", 1)[1].strip()
+                if category:
+                    profile["name"] = f"{category.title()} Hub"
+            elif "headline" in lower and ":" in line:
+                profile["headline"] = line.split(":", 1)[1].strip() or profile["headline"]
+            elif ("subheading" in lower or "description" in lower) and ":" in line:
+                profile["subheadline"] = line.split(":", 1)[1].strip() or profile["subheadline"]
+            elif ("cta" in lower or "button" in lower) and ":" in line:
+                value = line.split(":", 1)[1].strip()
+                if value:
+                    profile["cta"] = value[:28]
+
+        bullet_candidates = []
+        for line in lines:
+            if line.startswith("-") or line.startswith("*"):
+                text = line.lstrip("-* ").strip()
+                if text and len(text) > 5:
+                    bullet_candidates.append(text)
+
+        if bullet_candidates:
+            profile["features"] = bullet_candidates[:3]
+
+        return profile
+
+    def _build_contextual_fallback(self, spec: str) -> dict:
+        """Build a non-generic fallback website using inferred spec context."""
+        p = self._extract_profile(spec)
+        while len(p["features"]) < 3:
+            p["features"].append("Tailored experience")
+        return {
+            "index.html": f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta name=\"autodevos-generation-mode\" content=\"degraded-fallback\">
+    <meta name=\"description\" content=\"{p['name']} - custom generated website\">
+    <title>{p['name']}</title>
+    <link rel=\"stylesheet\" href=\"style.css\">
+</head>
+<body>
+    <header class=\"topbar\">
+        <h1>{p['name']}</h1>
+        <nav>
+            <a href=\"#home\">Home</a>
+            <a href=\"#features\">Features</a>
+            <a href=\"#contact\">Contact</a>
+        </nav>
+    </header>
+    <main>
+        <section id=\"home\" class=\"hero\">
+            <h2>{p['headline']}</h2>
+            <p>{p['subheadline']}</p>
+            <button class=\"cta\">{p['cta']}</button>
+        </section>
+        <section id=\"features\" class=\"features\">
+            <article><h3>{p['features'][0]}</h3></article>
+            <article><h3>{p['features'][1]}</h3></article>
+            <article><h3>{p['features'][2]}</h3></article>
+        </section>
+        <section id=\"contact\" class=\"contact\">
+            <h2>Ready to move forward?</h2>
+            <button class=\"cta\">{p['cta']}</button>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2026 {p['name']}. All rights reserved.</p>
+    </footer>
+    <script src=\"script.js\"></script>
+</body>
+</html>""",
+            "style.css": """* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Segoe UI, Arial, sans-serif; color: #202124; background: #f8fafc; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: #0f172a; color: #fff; }
+.topbar nav { display: flex; gap: 1rem; }
+.topbar a { color: #fff; text-decoration: none; }
+.hero { padding: 4rem 1.5rem; text-align: center; background: linear-gradient(120deg, #0ea5e9, #2563eb); color: #fff; }
+.hero p { margin: 1rem auto; max-width: 700px; }
+.cta { border: 0; border-radius: 8px; background: #fff; color: #1d4ed8; padding: 0.8rem 1.4rem; font-weight: 700; cursor: pointer; }
+.features { padding: 2rem 1.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.features article { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
+.contact { padding: 2rem 1.5rem; text-align: center; }
+footer { padding: 1.5rem; text-align: center; color: #475569; }
+@media (max-width: 720px) { .topbar { flex-direction: column; gap: 0.75rem; } }""",
+            "script.js": """document.querySelectorAll('a[href^="#"]').forEach((el) => {
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(el.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+  });
+});""",
+        }
+
     async def generate_code(
         self, spec: str, design: dict, qa_results: str = "", security_report: str = "", seo_rec: str = ""
     ) -> dict:
-        """Generate HTML/CSS/JS code for website"""
+        """Generate HTML/CSS/JS code for website with precision prompt"""
         improvements = []
         if qa_results:
             improvements.append(f"QA findings to address: {qa_results}")
@@ -33,193 +146,95 @@ class DeveloperAgent(BaseAgent):
         if seo_rec:
             improvements.append(f"SEO improvements: {seo_rec}")
 
-        task = (
-            f"Spec:\n{spec}\n\n"
-            f"Design:\n{json.dumps(design, indent=2)}\n\n"
-        )
+        # Build the ULTRA-PRECISE prompt
+        task = f"""CRITICAL TASK: Generate production-ready website code based on these specifications.
+
+__________ SPECIFICATION __________
+{spec}
+
+__________ DESIGN __________
+{json.dumps(design, indent=2)}
+"""
         
         if improvements:
-            improvements_text = "Improvements to apply:\n" + "\n".join(improvements) + "\n\n"
-            task += improvements_text
+            task += "\n__________ IMPROVEMENTS __________\n" + "\n".join(improvements)
         
-        task += (
-            "Output ONLY valid JSON with filename→content. Must include index.html, style.css, script.js. "
-            "Make it modern, responsive, and production-ready."
-        )
+        task += """
+
+__________ YOUR INSTRUCTIONS (FOLLOW EXACTLY) __________
+
+You are a Senior Frontend Developer with 10+ years of experience.
+
+MOST IMPORTANT: 
+- Every output character must be inside valid JSON object
+- JSON structure: {{"index.html": "...full html...", "style.css": "...full css...", "script.js": "...full js..."}}
+- NO explanations outside JSON - ONLY JSON
+
+STEP 1: READ THE SPECIFICATION CAREFULLY
+Extract ALL information:
+- What is this business/website about?
+- What are the specific pages needed?
+- What content/text should appear (not generic)
+- What buttons/CTAs are needed (specific labels)?
+- What color/style is mentioned?
+
+STEP 2: BUILD HTML FILE
+✓ Start with <!DOCTYPE html>
+✓ Include <meta charset="UTF-8"> and viewport
+✓ Create semantic structure: header, nav, main, sections, footer
+✓ Use specific text/content from specification (NOT "Your Company")
+✓ Add actual button labels from spec
+✓ Include proper IDs and classes
+✓ Ensure all <img>, <a>, <button> tags properly closed
+✓ Add proper form tags if mentioned in spec
+
+STEP 3: BUILD CSS FILE  
+✓ Start with reset: * { margin: 0; padding: 0; box-sizing: border-box; }
+✓ Mobile-first: create mobile styles first, then media queries
+✓ Include hover effects, transitions, animations
+✓ Professional spacing and typography
+✓ Colors mentioned in design
+✓ Responsive grid layouts with flexbox/grid
+✓ Smooth user experience
+
+STEP 4: BUILD JAVASCRIPT FILE
+✓ Smooth scroll for anchor links
+✓ Form validation if forms exist
+✓ Event handlers with error handling
+✓ NO syntax errors - code must work
+✓ Vanilla JS only - no frameworks
+
+STEP 5: OUTPUT IMMEDIATELY
+Format: {{"index.html": "<!DOCTYPE html>...", "style.css": "body {{ ... }}", "script.js": "// code..."}}
+Start with { character immediately.
+NO markdown, NO explanations, NO code fences.
+Only valid JSON.
+
+Generate the website now:"""
 
         code_text = await self.think(task, {"spec": spec, "design": design})
 
-        # Extract JSON from response
-        try:
-            json_match = re.search(r"\{.*\}", code_text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-        except (json.JSONDecodeError, AttributeError):
-            pass
+        # Extract JSON from response with multiple recovery strategies
+        candidates = [code_text]
+        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", code_text, re.DOTALL)
+        if fenced:
+            candidates.append(fenced.group(1))
 
-        # Fallback minimal website
-        return {
-            "index.html": """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoDevOS Generated Site</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <nav class="navbar">
-        <h1>Your Company</h1>
-        <ul>
-            <li><a href="#home">Home</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#contact">Contact</a></li>
-        </ul>
-    </nav>
-    <main>
-        <section id="home" class="hero">
-            <h2>Welcome to Your Company</h2>
-            <p>Transform your ideas into reality.</p>
-            <button class="cta">Get Started</button>
-        </section>
-        <section id="features" class="features">
-            <h2>Features</h2>
-            <div class="feature-grid">
-                <div class="feature"><h3>Feature 1</h3><p>Description here</p></div>
-                <div class="feature"><h3>Feature 2</h3><p>Description here</p></div>
-                <div class="feature"><h3>Feature 3</h3><p>Description here</p></div>
-            </div>
-        </section>
-    </main>
-    <footer>
-        <p>&copy; 2026 Your Company. All rights reserved.</p>
-    </footer>
-    <script src="script.js"></script>
-</body>
-</html>""",
-            "style.css": """* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+        start_idx = code_text.find("{")
+        end_idx = code_text.rfind("}")
+        if start_idx != -1 and end_idx > start_idx:
+            candidates.append(code_text[start_idx:end_idx + 1])
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    line-height: 1.6;
-    color: #333;
-}
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict) and all(k in parsed for k in ["index.html", "style.css", "script.js"]):
+                    # Ignore provider-level placeholder payloads and use spec-aware fallback instead.
+                    if "model provider was unavailable" in parsed.get("index.html", "").lower():
+                        continue
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                continue
 
-.navbar {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 1rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.navbar ul {
-    display: flex;
-    list-style: none;
-    gap: 2rem;
-}
-
-.navbar a {
-    color: white;
-    text-decoration: none;
-    transition: opacity 0.3s;
-}
-
-.navbar a:hover {
-    opacity: 0.8;
-}
-
-.hero {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 6rem 2rem;
-    text-align: center;
-}
-
-.hero h2 {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-}
-
-.cta {
-    background: white;
-    color: #667eea;
-    padding: 0.75rem 2rem;
-    border: none;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    margin-top: 1rem;
-    transition: transform 0.3s;
-}
-
-.cta:hover {
-    transform: scale(1.05);
-}
-
-.features {
-    padding: 4rem 2rem;
-}
-
-.feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-    margin-top: 2rem;
-}
-
-.feature {
-    padding: 2rem;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    transition: box-shadow 0.3s;
-}
-
-.feature:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-footer {
-    background: #333;
-    color: white;
-    text-align: center;
-    padding: 2rem;
-}
-
-@media (max-width: 768px) {
-    .navbar {
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    .navbar ul {
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    .hero h2 {
-        font-size: 2rem;
-    }
-}""",
-            "script.js": """document.addEventListener('DOMContentLoaded', function() {
-    console.log('Site loaded');
-    
-    const ctas = document.querySelectorAll('.cta, a[href*="#"]');
-    ctas.forEach(cta => {
-        cta.addEventListener('click', function(e) {
-            if (this.href.includes('#')) {
-                e.preventDefault();
-                const target = this.getAttribute('href');
-                if (target !== '#' && document.querySelector(target)) {
-                    document.querySelector(target).scrollIntoView({ behavior: 'smooth' });
-                }
-            }
-        });
-    });
-});""",
-        }
+        # LLM output was unusable (often due to provider failure). Return contextual fallback.
+        return self._build_contextual_fallback(spec)

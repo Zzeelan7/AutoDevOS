@@ -28,7 +28,7 @@ services:
       CHROMA_URL: http://chroma:8001
       SANDBOX_URL: http://sandbox:9000
       OLLAMA_URL: http://172.28.48.1:11434
-      OLLAMA_MODEL: llama3
+      OLLAMA_MODEL: deepseek-coder:6.7b-instruct-q4_K_M
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       NUM_CPU: 4
       NUM_GPU: 1

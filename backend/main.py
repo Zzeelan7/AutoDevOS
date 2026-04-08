@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import json
 import asyncio
 from pathlib import Path
+from pydantic import BaseModel
 
 from models.job import init_db, get_db, Job, Reward, SessionLocal
 from db.redis_client import redis_client, RedisClient
@@ -18,6 +19,34 @@ from agents.base import BaseAgent
 from api.strategies import router as strategies_router
 from orchestration.worker import job_worker_loop
 from openenv_integration import OpenEnvBenchmark, create_task_from_prompt
+
+
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+class JobCreateRequest(BaseModel):
+    prompt: str
+
+class JobResponse(BaseModel):
+    jobId: str
+    status: str
+    prompt: str | None = None
+    iterations: int | None = None
+    current_iteration: int | None = None
+    overall_reward: float | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    error_message: str | None = None
+    degraded: bool | None = None
+
+class JobListResponse(BaseModel):
+    jobId: str
+    prompt: str
+    status: str
+    created_at: str
+    overall_reward: float | None = None
+
 
 # Global task reference
 worker_task = None
@@ -75,8 +104,8 @@ app.include_router(strategies_router)
 # ============================================================================
 
 
-@app.post("/api/jobs")
-async def create_job(request: dict, db: Session = Depends(get_db)):
+@app.post("/api/jobs", response_model=JobResponse)
+async def create_job(request: JobCreateRequest, db: Session = Depends(get_db)):
     """
     POST /api/jobs
     Create a new job and queue it for processing
@@ -84,7 +113,7 @@ async def create_job(request: dict, db: Session = Depends(get_db)):
     Request: { prompt: str }
     Response: { jobId: str, status: str }
     """
-    prompt = request.get("prompt", "").strip()
+    prompt = request.prompt.strip()
     
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
@@ -147,6 +176,7 @@ async def get_job(job_id: str, db: Session = Depends(get_db)):
             "jobId": job.job_id,
             "prompt": job.prompt,
             "status": job.status,
+            "degraded": job.status == "degraded",
             "iterations": job.iterations,
             "current_iteration": job.current_iteration,
             "overall_reward": job.overall_reward,

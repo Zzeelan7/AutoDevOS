@@ -46,11 +46,13 @@ class AgentState(TypedDict):
 
 
 async def pm_node(state: AgentState) -> AgentState:
-    """Product Manager generates specification"""
+    """Product Manager generates specification from prompt"""
     agent = PMAgent(state["redis_client"], state["job_id"], rl_engine=rl_engine)
-    await agent.emit("agent_log", f"📋 Generating product spec from prompt: {state['prompt'][:50]}...")
+    await agent.emit("agent_log", f"📋 Generating detailed spec...")
     
-    spec = await agent.generate_spec(state["prompt"])
+    # Use raw prompt (or enhanced plan if available)
+    source = state.get("enhanced_plan") or state["prompt"]
+    spec = await agent.generate_spec(source)
     state["spec"] = spec
     
     await agent.emit("agent_log", f"✓ Spec generated ({len(spec)} chars)")
@@ -95,8 +97,12 @@ async def execution_node(state: AgentState) -> AgentState:
     """Execute site in sandbox and collect metrics"""
     from agents.base import OllamaClient
     
-    client = OllamaClient()
-    await client.pull_model()  # Ensure model available
+    # Attempt to ensure Ollama model is available (gracefully skip if unavailable)
+    try:
+        client = OllamaClient()
+        await client.pull_model()  # Ensure model available  
+    except Exception as e:
+        print(f"⚠️  Ollama unavailable for verification, skipping model pull: {e}", flush=True)
     
     # Emit to client
     event = {

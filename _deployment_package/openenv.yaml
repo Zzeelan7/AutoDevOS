@@ -1,0 +1,239 @@
+name: website-generation-environment
+version: 1.0.0
+description: >
+  A real-world environment for training and evaluating AI agents that generate
+  websites. The environment simulates the iterative website development process,
+  where agents receive feedback on code quality, performance, accessibility,
+  design, and functionality, and must improve their output across iterations.
+
+authors:
+  - name: AutoDevOS Team
+    contact: ""
+
+tasks:
+  - id: simple_landing_page
+    name: Simple Landing Page
+    description: >
+      Create a simple landing page with hero section and call-to-action button.
+      The page should have a compelling heading, brief description, and prominent
+      CTA button. Perfect for learning basic HTML/CSS structure.
+    difficulty: easy
+    max_steps: 2
+    target_reward: 0.8
+    
+  - id: portfolio_website
+    name: Professional Portfolio Website
+    description: >
+      Create a professional portfolio website with multiple sections including
+      about, projects/work showcase, featured work with descriptions, and
+      contact information. Should demonstrate responsive design.
+    difficulty: medium
+    max_steps: 3
+    target_reward: 0.85
+    
+  - id: responsive_ecommerce
+    name: Responsive E-commerce Product Listing
+    description: >
+      Build a responsive e-commerce product listing page with product cards,
+      filtering capabilities, search functionality, and shopping interactions.
+      Requires advanced CSS/JS for full functionality and accessibility.
+    difficulty: hard
+    max_steps: 4
+    target_reward: 0.9
+
+observation_space:
+  type: object
+  description: The state of the website generation environment
+  properties:
+    task_id:
+      type: string
+      description: Unique identifier for the task (simple_landing_page, portfolio_website, responsive_ecommerce)
+    task_type:
+      type: string
+      description: Type of task being performed
+    task_description:
+      type: string
+      description: Human-readable description of what to build
+    current_iteration:
+      type: integer
+      description: Current step number in the episode (0-indexed)
+    max_iterations:
+      type: integer
+      description: Maximum allowed iterations for this task
+    generated_html:
+      type: string
+      maxLength: 5000
+      description: Current HTML code (truncated to 5000 chars)
+    generated_css:
+      type: string
+      maxLength: 5000
+      description: Current CSS code (truncated to 5000 chars)
+    generated_js:
+      type: string
+      maxLength: 5000
+      description: Current JavaScript code (truncated to 5000 chars)
+    last_reward:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Reward score from previous step
+    last_feedback:
+      type: object
+      description: Detailed feedback scores from previous evaluation
+      properties:
+        code_quality:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        performance:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        accessibility:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        design:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        functionality:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+    done:
+      type: boolean
+      description: Whether the episode is complete
+    error_message:
+      type: string
+      nullable: true
+      description: Error message if step failed
+
+action_space:
+  type: object
+  description: Actions the agent can take (providing improved code)
+  required:
+    - html
+  properties:
+    html:
+      type: string
+      maxLength: 10000
+      description: Updated HTML code for the website
+    css:
+      type: string
+      maxLength: 10000
+      description: Updated CSS code for the website
+    js:
+      type: string
+      maxLength: 10000
+      description: Updated JavaScript code for the website
+    reasoning:
+      type: string
+      maxLength: 1000
+      description: Agent's reasoning for the changes (debugging purposes)
+
+reward_spec:
+  type: object
+  description: Multi-dimensional feedback on website quality
+  properties:
+    total_score:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Overall quality score
+    code_quality:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Score for HTML/CSS/JS validity and structure
+    performance:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Score for file sizes and optimization
+    accessibility:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Score for accessibility features (alt text, semantic HTML, ARIA)
+    design:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Score for design quality, responsiveness, visual hierarchy
+    functionality:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Score for interactive elements and features
+    has_valid_html:
+      type: boolean
+      description: True if HTML structure is valid
+    has_responsive_css:
+      type: boolean
+      description: True if CSS includes responsive design patterns
+    has_interactivity:
+      type: boolean
+      description: True if JavaScript adds interactive functionality
+    progress_delta:
+      type: number
+      minimum: -1.0
+      maximum: 1.0
+      description: Change in score from previous iteration
+
+episode_structure:
+  max_steps_per_episode: 4
+  termination_conditions:
+    - "Target reward achieved (task-specific)"
+    - "Maximum iterations reached"
+    - "Error/invalid submission"
+  reset_between_tasks: true
+
+evaluation_criteria:
+  - dimension: code_quality
+    weight: 0.20
+    description: >
+      Evaluates HTML validity, CSS structure, JavaScript syntax.
+      Checks for properly closed tags, valid selectors, and functional code.
+    
+  - dimension: performance
+    weight: 0.20
+    description: >
+      Evaluates file sizes and code efficiency.
+      Penalizes excessive whitespace and bloated code. Prefers compact, optimized output.
+    
+  - dimension: accessibility
+    weight: 0.15
+    description: >
+      Evaluates semantic HTML, alt text, proper heading hierarchy, ARIA attributes.
+      Encourages best practices for screen readers and accessibility compliance.
+    
+  - dimension: design
+    weight: 0.30
+    description: >
+      Evaluates responsive design, color scheme consistency, visual hierarchy,
+      typography choices, and overall aesthetic quality.
+    
+  - dimension: functionality
+    weight: 0.15
+    description: >
+      Evaluates interactive elements (buttons, forms, links), feature completeness,
+      and task-specific requirements fulfillment.
+
+deployment:
+  type: container
+  container_runtime: docker
+  recommended_gpu: false
+  recommended_cpu: 2
+  recommended_memory_gb: 8
+  estimated_step_time_seconds: 3
+  warmup_time_seconds: 5
+
+metadata:
+  domain: web_development
+  task_category: code_generation
+  real_world_utility: "High - directly applicable to automated web development"
+  difficulty_progression: "easy → medium → hard"
+  agent_type_recommended: "language_models"
+  expected_baseline_score: 0.70
+  episodic: true

@@ -76,6 +76,7 @@ async def process_job(job_id: str, db: Session):
         initial_state: AgentState = {
             "job_id": job_id,
             "prompt": job.prompt,
+
             "iteration": 1,
             "codebase": {},
             "spec": "",
@@ -94,12 +95,48 @@ async def process_job(job_id: str, db: Session):
         # Run the LangGraph pipeline
         final_state = await graph.ainvoke(initial_state)
         
+        # Detect degraded generation mode (fallback content due provider/output issues)
+        generated_codebase = final_state.get("codebase", {})
+        generated_index = generated_codebase.get("index.html", "") if isinstance(generated_codebase, dict) else ""
+        is_degraded = "autodevos-generation-mode\" content=\"degraded-fallback" in generated_index
+
         # Store results in database
-        job.status = "completed"
+        job.status = "degraded" if is_degraded else "completed"
         job.iterations = final_state.get("iteration", 1)
         job.overall_reward = sum(final_state.get("rewards", {}).values()) / 7  # Average of 7 agents
-        job.codebase = final_state.get("codebase", {})
+        job.codebase = generated_codebase
         job.meeting_log = final_state.get("meeting_log", [])
+        if is_degraded:
+            job.error_message = "Generation completed in degraded mode due model/provider issues"
+
+        # Auto-retry once for degraded runs to recover from transient provider issues
+        retry_markers = [
+            item
+            for item in (job.meeting_log or [])
+            if isinstance(item, str) and item.startswith("AUTO_RETRY_ATTEMPT:")
+        ]
+        retry_count = len(retry_markers)
+
+        if is_degraded and retry_count < 1:
+            job.status = "queued"
+            job.error_message = "Degraded generation detected. Auto-retry scheduled (1/1)."
+            job.meeting_log = (job.meeting_log or []) + [f"AUTO_RETRY_ATTEMPT:{retry_count + 1}"]
+            db.commit()
+
+            await redis_client.publish_event(
+                job_id,
+                {
+                    "type": "job_retry_scheduled",
+                    "agent": "worker",
+                    "content": "Provider instability detected. Scheduling one automatic retry.",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+
+            await redis_client.push_job(job_id)
+            print(f"↻ Job {job_id} queued for one-time auto-retry", flush=True)
+            sys.stdout.flush()
+            return
         
         # Store individual rewards
         for agent_name, score in final_state.get("rewards", {}).items():
@@ -145,13 +182,17 @@ async def process_job(job_id: str, db: Session):
                 print(f"⚠️ OpenEnv evaluation failed: {e}", flush=True)
                 sys.stdout.flush()
         
-        # Emit job completed event
+        # Emit job completed/degraded event
         await redis_client.publish_event(
             job_id,
             {
-                "type": "job_done",
+                "type": "job_degraded" if is_degraded else "job_done",
                 "agent": "worker",
-                "content": f"✓ Job completed. Overall reward: {job.overall_reward:.1f}/10",
+                "content": (
+                    f"⚠ Job completed in degraded mode. Overall reward: {job.overall_reward:.1f}/10"
+                    if is_degraded
+                    else f"✓ Job completed. Overall reward: {job.overall_reward:.1f}/10"
+                ),
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
