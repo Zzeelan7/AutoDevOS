@@ -125,18 +125,11 @@ SUCCESS_SCORE_THRESHOLD = 0.80  # Consider task successful if score >= 0.80
 
 def log_start(task: str, env: str, model: str) -> None:
     """
-    Log the start of evaluation.
-    Format is critical - automated validators parse this exact structure.
+    Log the start of evaluation - EXACT format required by OpenEnv spec.
+    Format: [START] task=<task_name> env=<benchmark> model=<model_name>
     """
     print(
-        json.dumps({
-            "event": "START",
-            "timestamp": datetime.utcnow().isoformat(),
-            "task": task,
-            "environment": env,
-            "model": model,
-            "api_endpoint": API_BASE_URL,
-        }),
+        f"[START] task={task} env={env} model={model}",
         flush=True
     )
 
@@ -149,21 +142,16 @@ def log_step(
     error: Optional[str] = None,
 ) -> None:
     """
-    Log each step of the inference.
-    Format is critical - automated validators parse this exact structure.
+    Log each step - EXACT format required by OpenEnv spec.
+    Format: [STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
     """
-    log_entry = {
-        "event": "STEP",
-        "timestamp": datetime.utcnow().isoformat(),
-        "step": step,
-        "action_summary": action[:100] if action else "",  # First 100 chars
-        "reward": round(reward, 4),
-        "done": done,
-    }
-    if error:
-        log_entry["error"] = error
-    
-    print(json.dumps(log_entry), flush=True)
+    done_str = str(done).lower()
+    error_str = error if error else "null"
+    action_escaped = action.replace('"', '\\"')[:200]  # Escape quotes, limit length
+    print(
+        f'[STEP] step={step} action="{action_escaped}" reward={reward:.2f} done={done_str} error={error_str}',
+        flush=True
+    )
 
 
 def log_end(
@@ -173,19 +161,13 @@ def log_end(
     rewards: List[float],
 ) -> None:
     """
-    Log the end of evaluation.
-    Format is critical - automated validators parse this exact structure.
+    Log end of evaluation - EXACT format required by OpenEnv spec.
+    Format: [END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
     """
+    success_str = str(success).lower()
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        json.dumps({
-            "event": "END",
-            "timestamp": datetime.utcnow().isoformat(),
-            "success": success,
-            "total_steps": steps,
-            "final_score": round(score, 4),
-            "reward_history": [round(r, 4) for r in rewards],
-            "average_reward": round(sum(rewards) / len(rewards), 4) if rewards else 0.0,
-        }),
+        f"[END] success={success_str} steps={steps} score={score:.2f} rewards={rewards_str}",
         flush=True
     )
 
