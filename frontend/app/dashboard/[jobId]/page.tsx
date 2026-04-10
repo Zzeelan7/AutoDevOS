@@ -72,11 +72,11 @@ export default function JobDashboard() {
       if (!jobId) return;
       
       try {
-        const res = await fetch(`http://localhost:8000/api/jobs/${jobId}/preview`, { 
+        const res = await fetch(`http://localhost:8000/preview/${jobId}`, { 
           signal: AbortSignal.timeout(5000) // 5 second timeout
         });
         if (res.ok) {
-          setPreviewUrl(`http://localhost:8000/api/jobs/${jobId}/preview`);
+          setPreviewUrl(`http://localhost:8000/preview/${jobId}`);
         }
       } catch (err) {
         // Silent fail - preview not ready yet

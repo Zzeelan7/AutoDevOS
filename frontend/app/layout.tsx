@@ -1,6 +1,7 @@
 import React from 'react'
 // @ts-ignore - CSS import
 import './globals.css'
+import { PuterScript } from '@/components/PuterScript'
 
 export const metadata = {
   title: 'AutoDevOS - Build websites with AI',
@@ -20,36 +21,10 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {/* Puter.js Integration - Free Claude AI Access */}
-        <script
-          src="https://js.puter.com/v2/"
-          onError={() => {
-            console.warn('Puter.js failed to load - running in offline mode');
-            if (typeof window !== 'undefined') {
-              window.puter = undefined;
-            }
-          }}
-          async
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.puterReady = false;
-              window.addEventListener('puter-ready', () => {
-                window.puterReady = true;
-                console.log('✅ Puter.js loaded successfully');
-              });
-              setTimeout(() => {
-                if (!window.puterReady && !window.puter) {
-                  console.warn('Puter.js did not load within timeout - offline mode');
-                }
-              }, 5000);
-            `,
-          }}
-        />
       </head>
       <body className="dark">
         {children}
+        <PuterScript />
       </body>
     </html>
   )
