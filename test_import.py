@@ -3,8 +3,9 @@
 import sys
 import os
 
-# Set token for testing
-os.environ['GITHUB_TOKEN'] = 'GITHUB_TOKEN_PLACEHOLDER'
+# Load token from environment variable
+if 'GITHUB_TOKEN' not in os.environ:
+    print('Warning: GITHUB_TOKEN not set')
 
 sys.path.insert(0, r'c:\Users\zzeel\OneDrive\Desktop\AutoDevOS\hf-autodevos-space')
 

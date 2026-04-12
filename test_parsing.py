@@ -2,7 +2,9 @@
 """Test parsing with proper markdown removal"""
 import os
 
-os.environ['GITHUB_TOKEN'] = 'GITHUB_TOKEN_PLACEHOLDER'
+# Load token from environment variable
+if 'GITHUB_TOKEN' not in os.environ:
+    print('Warning: GITHUB_TOKEN not set')
 
 # Sample response like we get from GitHub
 sample_response = """Here is the complete, functional website code:
