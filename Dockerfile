@@ -21,5 +21,6 @@ COPY openenv.yaml .
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)" || exit 1
 
-# Run inference
+# Runtime: set OPENAI_API_KEY, API_BASE_URL, MODEL_NAME (HF Space → Repository secrets).
+# Container listens on the process default; HF Spaces maps port 7860 when applicable.
 CMD ["python", "inference.py"]

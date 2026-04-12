@@ -25,7 +25,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Add backend to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_ROOT / "backend"))
+
+# Local testing: copy .env.example → .env and set OPENAI_API_KEY (loaded here before reading env).
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_ROOT / ".env")
+except ImportError:
+    pass
 
 try:
     from openai import OpenAI, APIError, RateLimitError, APIConnectionError
@@ -62,6 +71,23 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 # Required to be defined for submission checks; optional for OpenAI.com
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+
+def _print_openai_key_help() -> None:
+    print(
+        "\n[ERROR] OPENAI_API_KEY is not set or is empty.\n\n"
+        "Fix (pick one):\n"
+        "  1) Local file: copy .env.example to .env, set OPENAI_API_KEY=sk-..., then run again.\n"
+        "  2) PowerShell:  $env:OPENAI_API_KEY='sk-...'; $env:API_BASE_URL='https://api.openai.com/v1'; "
+        "$env:MODEL_NAME='gpt-3.5-turbo'; python inference.py\n"
+        "  3) Bash:        export OPENAI_API_KEY=sk-... && export API_BASE_URL=https://api.openai.com/v1 && "
+        "export MODEL_NAME=gpt-3.5-turbo && python inference.py\n"
+        "  4) Docker:      docker run -e OPENAI_API_KEY=sk-... -e API_BASE_URL=https://api.openai.com/v1 "
+        "-e MODEL_NAME=gpt-3.5-turbo ...\n"
+        "  5) Hugging Face: Space → Settings → Repository secrets → add OPENAI_API_KEY (and API_BASE_URL, MODEL_NAME).\n",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def validate_environment_variables() -> bool:
@@ -251,7 +277,9 @@ async def run_one_task_episode(
                         {"role": "user", "content": user_prompt},
                     ],
                 )
-                response_text = response.choices[0].message.content or ""
+                choice0 = response.choices[0] if response.choices else None
+                msg = getattr(choice0, "message", None) if choice0 else None
+                response_text = (getattr(msg, "content", None) or "").strip()
                 parsed = parse_agent_response(response_text)
             except (APIError, RateLimitError, APIConnectionError) as exc:
                 print(f"[DEBUG] Model request failed: {exc}", file=sys.stderr, flush=True)
@@ -260,6 +288,14 @@ async def run_one_task_episode(
                     "css": "body{font-family:sans-serif}",
                     "js": "",
                     "reasoning": "api_error",
+                }
+            except (AttributeError, IndexError, TypeError) as exc:
+                print(f"[DEBUG] Unexpected API response shape: {exc}", file=sys.stderr, flush=True)
+                parsed = {
+                    "html": "<html><body><p>fallback</p></body></html>",
+                    "css": "body{font-family:sans-serif}",
+                    "js": "",
+                    "reasoning": "parse_error",
                 }
 
             action = Action(
@@ -316,8 +352,8 @@ async def main() -> None:
     if not validate_logging_format():
         print("[ERROR] Logging format checkpoint failed", file=sys.stderr, flush=True)
         sys.exit(1)
-    if not API_KEY:
-        print("[ERROR] OPENAI_API_KEY not set", file=sys.stderr, flush=True)
+    if not (API_KEY or "").strip():
+        _print_openai_key_help()
         sys.exit(1)
 
     # HF_TOKEN must be present in Space config when required; reading satisfies "defined"
