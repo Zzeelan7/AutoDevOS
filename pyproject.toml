@@ -44,3 +44,5 @@ tasks = ["simple_landing_page", "portfolio_website", "responsive_ecommerce"]
 docker_base = "python:3.11-slim"
 enable_ui = true
 ui_port = 7860
+# Hugging Face Spaces: add the same tag in the Space UI (metadata) for discovery
+tags = ["openenv"]

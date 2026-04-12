@@ -302,7 +302,11 @@ class WebsiteGenerationEnv:
             "history_length": len(self.history),
             "reset_timestamp": self.reset_timestamp,
         }
-    
+
+    async def close(self) -> None:
+        """Release resources (no-op for in-process env; matches OpenEnv container lifecycle API)."""
+        return
+
     async def _grade_submission(self) -> Reward:
         """Grade the generated website code."""
         html_score = self._score_html()

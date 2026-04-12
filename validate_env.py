@@ -48,7 +48,7 @@ def test_environment():
         print(f"  [OK] Environment created for task: simple_landing_page")
         
         # Check environment has required methods
-        required_methods = ['reset', 'step', 'state']
+        required_methods = ["reset", "step", "state", "close"]
         for method in required_methods:
             if not hasattr(env, method):
                 print(f"  [FAIL] Environment missing method: {method}")

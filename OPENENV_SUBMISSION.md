@@ -99,13 +99,19 @@ https://huggingface.co/spaces/Zzeelan7/autodevos-website-generation
 
 ## Logging Format (CRITICAL for evaluation)
 
-Your inference script prints **one JSON object per line on stdout** (diagnostics go to stderr only).
+Your inference script prints **only** these bracket lines to **stdout** (diagnostics on **stderr**):
+
+```
+[START] task=all_tasks env=website-generation-environment model=gpt-3.5-turbo
+[STEP] step=1 action="..." reward=0.45 done=false error=null
+[END] success=true steps=9 score=0.62 rewards=0.40,0.50,0.55,...
+```
 
 **Rules:**
-- One `{"event":"START",...}` line at the beginning of the full run
-- One `{"event":"STEP",...}` line per environment step (monotonic `step` across all tasks)
-- One `{"event":"END",...}` line at completion (always emitted on normal or error exit from `main`)
-- `final_score` and per-step `reward` values stay in [0, 1]
+- Exactly one `[START]` line after validation, before any environment steps
+- One `[STEP]` line per `env.step()` (monotonic `step` across all three tasks)
+- One `[END]` line in a `finally` block so it always runs after `[START]`
+- `reward` / score values in `[0, 1]`; `error=null` unless you attach a string
 
 ---
 

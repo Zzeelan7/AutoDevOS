@@ -37,16 +37,17 @@
 - [x] Includes HF_TOKEN support
 
 ### ✅ 5. Output Format (Strict)
-Inference script must emit ONLY these formats (no extra debug output):
-- [x] `[START]`: JSON with fields: event, timestamp, task, environment, model, api_endpoint
-- [x] `[STEP]`: JSON with fields: event, timestamp, step, action_summary, reward, done, (optional: error)
-- [x] `[END]`: JSON with fields: event, timestamp, success, total_steps, final_score, reward_history, average_reward
+Inference **stdout** must emit only bracket lines (no JSON objects, no extra prints). Debug on stderr.
 
-Example valid output:
-```json
-{"event": "START", "timestamp": "2026-04-08T12:00:00.000000", "task": "simple_landing_page", "environment": "website-generation", "model": "gpt-3.5-turbo", "api_endpoint": "https://api.openai.com/v1"}
-{"event": "STEP", "timestamp": "2026-04-08T12:00:01.000000", "step": 1, "action_summary": "...", "reward": 0.45, "done": false}
-{"event": "END", "timestamp": "2026-04-08T12:00:30.000000", "success": true, "total_steps": 3, "final_score": 0.85, "reward_history": [0.45, 0.65, 0.85], "average_reward": 0.65}
+- [x] `[START] task=... env=... model=...`
+- [x] `[STEP] step=... action="..." reward=... done=... error=null|...`
+- [x] `[END] success=... steps=... score=... rewards=r1,r2,...`
+
+Example:
+```
+[START] task=all_tasks env=website-generation-environment model=gpt-3.5-turbo
+[STEP] step=1 action="<!DOCTYPE html..." reward=0.45 done=false error=null
+[END] success=false steps=9 score=0.62 rewards=0.45,0.50,0.55
 ```
 
 ---
@@ -69,9 +70,9 @@ Expected: Successfully tagged image as autodevos-test:latest
 
 **3. Check OpenEnv spec compliance:**
 ```bash
-python -c "import openenv_env; print(dir(openenv_env.WebsiteGenerationEnv))" | grep -E "(reset|step|state)"
+python -c "import openenv_env; print(dir(openenv_env.WebsiteGenerationEnv))" | grep -E "(reset|step|state|close)"
 ```
-Expected: Shows reset, step, state methods
+Expected: Shows reset, step, state, close methods
 
 **4. Verify inference runs:**
 ```bash
@@ -83,7 +84,7 @@ export MODEL_NAME="gpt-3.5-turbo"
 # Run inference (will fail without real API key, but script will start)
 timeout 5 python inference.py 2>&1 | head -1
 ```
-Expected: Outputs valid JSON starting with `{"event": "START"`
+Expected: First stdout line starts with `[START]` (validation messages are on stderr)
 
 ---
 
@@ -203,7 +204,7 @@ After pushing to HF Space, verify:
 
 ### ✅ Manual Verification
 1. Space URL responds: `https://huggingface.co/spaces/YOUR-USERNAME/...`
-2. Log format is correct (all JSON with [START]/[STEP]/[END])
+2. Log format is correct (stdout bracket lines only: [START]/[STEP]/[END])
 3. No DEBUG/INFO/ERROR messages (only structured logs)
 4. Inference completes in < 20 minutes
 5. Scores are in [0.0, 1.0] range

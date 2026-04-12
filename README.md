@@ -174,6 +174,7 @@ docker run \
   -e OPENAI_API_KEY="your-key-here" \
   -e API_BASE_URL="https://api.openai.com/v1" \
   -e MODEL_NAME="gpt-3.5-turbo" \
+  -e HF_TOKEN="your-hf-token-here" \
   autodevos-env
 ```
 
@@ -200,24 +201,28 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
 #### Running Inference
 
 ```bash
-# Set environment variables
+# Set environment variables (competition / OpenEnv)
 export OPENAI_API_KEY="your-key-here"
 export API_BASE_URL="https://api.openai.com/v1"
 export MODEL_NAME="gpt-3.5-turbo"
+export HF_TOKEN="your-hf-token-here"   # required to be defined for many validators / Spaces
 
 # Run the baseline agent
 python inference.py
 ```
 
-#### Output Format
+#### Output Format (automated scoring)
 
-**stdout** is one JSON object per line (no extra print statements). **stderr** carries validation and debug messages.
+**stdout** must contain only bracket structured lines (no JSON, no other prints). **stderr** carries validation, `[INFO]`, `[SUMMARY]`, and `[DEBUG]` messages.
 
-```json
-{"event": "START", "timestamp": "2026-04-12T12:00:00+00:00", "task": "all_tasks", "environment": "WebsiteGenerationEnvironment", "model": "gpt-3.5-turbo", "api_endpoint": "https://api.openai.com/v1"}
-{"event": "STEP", "timestamp": "...", "step": 1, "task": "simple_landing_page", "step_in_task": 1, "action_summary": "...", "reward": 0.65, "done": false}
-{"event": "END", "timestamp": "...", "success": true, "total_steps": 9, "final_score": 0.72, "reward_history": [0.45, 0.65], "average_reward": 0.55}
 ```
+[START] task=all_tasks env=website-generation-environment model=gpt-3.5-turbo
+[STEP] step=1 action="<html..." reward=0.45 done=false error=null
+[END] success=false steps=9 score=0.62 rewards=0.45,0.50,0.55,...
+```
+
+- `score` is `sum(step_rewards) / 9.0` (max steps across the three tasks), clamped to `[0, 1]`.
+- `rewards` is the comma-separated list of per-step scalar rewards (environment `total_score`).
 
 ---
 
@@ -273,15 +278,15 @@ These scores are reproducible and should be treated as the reference baseline.
 
 Before submitting, verify:
 
+- [ ] Run `./validate.sh` (or `bash validate.sh`) — structure, `docker build`, `openenv validate`, inference markers
 - [ ] `openenv validate` passes
 - [ ] `docker build` succeeds
-- [ ] `inference.py` runs and completes
-- [ ] Output includes JSON lines with `"event": "START"`, `"STEP"`, and `"END"`
+- [ ] `inference.py` runs and completes within **20 minutes** on **2 vCPU / 8 GB RAM**
+- [ ] **Stdout** includes only `[START]`, `[STEP]`, and `[END]` lines in the documented format
 - [ ] All 3+ tasks have graders returning 0.0–1.0 scores
 - [ ] Baseline reproduces consistent scores
-- [ ] Dockerfile runs on 2vCPU, 8GB RAM machines
-- [ ] Runtime < 20 minutes for inference
 - [ ] No hardcoded API keys in code
+- [ ] Hugging Face Space is public, uses this repo’s **Dockerfile**, and is **tagged `openenv`** (Space settings → metadata/tags)
 - [ ] README documents everything above
 
 ---
