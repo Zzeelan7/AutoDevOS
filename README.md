@@ -211,13 +211,12 @@ python inference.py
 
 #### Output Format
 
-The script outputs structured logs:
+**stdout** is one JSON object per line (no extra print statements). **stderr** carries validation and debug messages.
 
 ```json
-{"event": "START", "timestamp": "...", "task": "all_tasks", "model": "gpt-3.5-turbo"}
-{"event": "STEP", "step": 1, "reward": 0.65, "done": false}
-{"event": "STEP", "step": 2, "reward": 0.78, "done": true}
-{"event": "END", "success": true, "final_score": 0.78, "steps": 2}
+{"event": "START", "timestamp": "2026-04-12T12:00:00+00:00", "task": "all_tasks", "environment": "WebsiteGenerationEnvironment", "model": "gpt-3.5-turbo", "api_endpoint": "https://api.openai.com/v1"}
+{"event": "STEP", "timestamp": "...", "step": 1, "task": "simple_landing_page", "step_in_task": 1, "action_summary": "...", "reward": 0.65, "done": false}
+{"event": "END", "timestamp": "...", "success": true, "total_steps": 9, "final_score": 0.72, "reward_history": [0.45, 0.65], "average_reward": 0.55}
 ```
 
 ---
@@ -277,7 +276,7 @@ Before submitting, verify:
 - [ ] `openenv validate` passes
 - [ ] `docker build` succeeds
 - [ ] `inference.py` runs and completes
-- [ ] Output includes [START], [STEP], [END] logs
+- [ ] Output includes JSON lines with `"event": "START"`, `"STEP"`, and `"END"`
 - [ ] All 3+ tasks have graders returning 0.0–1.0 scores
 - [ ] Baseline reproduces consistent scores
 - [ ] Dockerfile runs on 2vCPU, 8GB RAM machines

@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements-inference.txt .
 RUN pip install --no-cache-dir -r requirements-inference.txt
 
-# Copy OpenEnv environment and inference script
-COPY backend/openenv_env.py .
+# Self-contained package: env module lives next to inference.py
+COPY openenv_env.py .
 COPY inference.py .
+COPY openenv.yaml .
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

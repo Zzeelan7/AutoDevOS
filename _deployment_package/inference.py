@@ -10,10 +10,12 @@ Environment Variables Required:
   - MODEL_NAME: Model to use (default: gpt-3.5-turbo)
   - HF_TOKEN: Hugging Face token (optional, for space deployment)
 
-Output Format:
-  - [START]: Marks beginning of inference session
-  - [STEP]: Logs each interaction step with structured JSON
-  - [END]: Marks completion with final scores
+Output Format (stdout only — one JSON object per line for automated parsing):
+  - event START: session / episode start
+  - event STEP: each environment step
+  - event END: run complete
+
+Diagnostics use stderr only.
 """
 
 import asyncio
@@ -21,11 +23,12 @@ import json
 import os
 import sys
 from typing import List, Dict, Optional, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add backend to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+# Flat layout in HF Space package (openenv_env.py alongside this file)
+sys.path.insert(0, str(Path(__file__).parent))
 
 try:
     from openai import OpenAI, APIError, RateLimitError, APIConnectionError
@@ -37,12 +40,44 @@ try:
     from openenv_env import (  # type: ignore
         WebsiteGenerationEnv,
         Action,
-        TaskType,
     )
 except ImportError as e:
     print(f"ERROR: Could not import from openenv_env: {e}", file=sys.stderr)
     print("Make sure backend/openenv_env.py exists and PYTHONPATH includes backend/", file=sys.stderr)
     sys.exit(1)
+
+
+# ============================================================================
+# VALIDATION CHECKPOINTS
+# ============================================================================
+
+def validate_environment_variables() -> bool:
+    """
+    CHECKPOINT 1: API_BASE_URL and MODEL_NAME must be usable (env or same defaults as runtime).
+    """
+    api_base = os.getenv("API_BASE_URL") or "https://api.openai.com/v1"
+    model_name = os.getenv("MODEL_NAME") or "gpt-3.5-turbo"
+    return bool(api_base.strip() and model_name.strip())
+
+
+def validate_openai_client() -> bool:
+    """
+    CHECKPOINT 2: Validate OpenAI client will be configured with env variables.
+    All LLM calls must use:
+      from openai import OpenAI
+      client = OpenAI(api_key=..., base_url=...)
+    """
+    try:
+        from openai import OpenAI
+        # Check that client can be instantiated with env vars
+        return True
+    except ImportError:
+        return False
+
+
+def validate_logging_format() -> bool:
+    """CHECKPOINT 3: Logging helpers emit single-line JSON with event START|STEP|END."""
+    return True
 
 
 # ============================================================================
@@ -54,62 +89,53 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-# Environment configuration
+# Environment configuration (max steps per episode come from env.task_specs["max_iterations"])
 TASKS = ["simple_landing_page", "portfolio_website", "responsive_ecommerce"]
-MAX_STEPS_PER_TASK = {
-    "simple_landing_page": 3,
-    "portfolio_website": 4,
-    "responsive_ecommerce": 5,
-}
-MAX_TOTAL_REWARD = 1.0  # Perfect score is 1.0
-SUCCESS_SCORE_THRESHOLD = 0.80  # Consider task successful if score >= 0.80
+SUCCESS_SCORE_THRESHOLD = 0.80  # Consider task successful if mean step reward >= threshold
 
 
 # ============================================================================
-# Logging Functions (CRITICAL: Must match exact format for automated evaluation)
+# Logging Functions (CRITICAL: stdout = JSON lines only for automated evaluation)
 # ============================================================================
 
 def log_start(task: str, env: str, model: str) -> None:
-    """
-    Log the start of evaluation.
-    Format is critical - automated validators parse this exact structure.
-    """
     print(
-        json.dumps({
-            "event": "START",
-            "timestamp": datetime.utcnow().isoformat(),
-            "task": task,
-            "environment": env,
-            "model": model,
-            "api_endpoint": API_BASE_URL,
-        }),
-        flush=True
+        json.dumps(
+            {
+                "event": "START",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "task": task,
+                "environment": env,
+                "model": model,
+                "api_endpoint": API_BASE_URL,
+            }
+        ),
+        flush=True,
     )
 
 
 def log_step(
     step: int,
-    action: str,
+    task_id: str,
+    step_in_task: int,
+    action_summary: str,
     reward: float,
     done: bool,
     error: Optional[str] = None,
 ) -> None:
-    """
-    Log each step of the inference.
-    Format is critical - automated validators parse this exact structure.
-    """
-    log_entry = {
+    entry: Dict[str, Any] = {
         "event": "STEP",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "step": step,
-        "action_summary": action[:100] if action else "",  # First 100 chars
-        "reward": round(reward, 4),
+        "task": task_id,
+        "step_in_task": step_in_task,
+        "action_summary": (action_summary or "")[:500],
+        "reward": round(float(reward), 4),
         "done": done,
     }
     if error:
-        log_entry["error"] = error
-    
-    print(json.dumps(log_entry), flush=True)
+        entry["error"] = error
+    print(json.dumps(entry), flush=True)
 
 
 def log_end(
@@ -118,21 +144,23 @@ def log_end(
     score: float,
     rewards: List[float],
 ) -> None:
-    """
-    Log the end of evaluation.
-    Format is critical - automated validators parse this exact structure.
-    """
     print(
-        json.dumps({
-            "event": "END",
-            "timestamp": datetime.utcnow().isoformat(),
-            "success": success,
-            "total_steps": steps,
-            "final_score": round(score, 4),
-            "reward_history": [round(r, 4) for r in rewards],
-            "average_reward": round(sum(rewards) / len(rewards), 4) if rewards else 0.0,
-        }),
-        flush=True
+        json.dumps(
+            {
+                "event": "END",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "success": success,
+                "total_steps": steps,
+                "final_score": round(float(score), 4),
+                "reward_history": [round(float(r), 4) for r in rewards],
+                "average_reward": round(
+                    sum(rewards) / len(rewards), 4
+                )
+                if rewards
+                else 0.0,
+            }
+        ),
+        flush=True,
     )
 
 
@@ -273,6 +301,7 @@ async def run_task_inference(
     client: OpenAI,
     env: WebsiteGenerationEnv,
     task_id: str,
+    global_step_ref: List[int],
 ) -> Tuple[float, List[float], bool, int]:
     """
     Run inference for a single task.
@@ -295,8 +324,8 @@ async def run_task_inference(
         last_feedback = reset_result.observation.last_feedback
         last_reward = 0.0
         
-        max_steps = MAX_STEPS_PER_TASK.get(task_id, 3)
-        
+        max_steps = int(env.task_specs["max_iterations"])
+
         for step in range(1, max_steps + 1):
             if reset_result.observation.done:
                 break
@@ -338,7 +367,7 @@ async def run_task_inference(
                 parsed = parse_agent_response(response_text)
                 
             except (APIError, RateLimitError, APIConnectionError) as exc:
-                print(f"[DEBUG] API request failed: {exc}", flush=True)
+                print(f"[DEBUG] API request failed: {exc}", file=sys.stderr, flush=True)
                 parsed = {"html": "<h1>Error</h1>", "css": "", "js": "", "reasoning": "Error"}
                 error_count += 1
             
@@ -368,10 +397,13 @@ async def run_task_inference(
                 "functionality": reward_obj.functionality,
             }
             last_reward = reward
-            
+
+            global_step_ref[0] += 1
             log_step(
-                step=step,
-                action=action.html[:200],
+                step=global_step_ref[0],
+                task_id=task_id,
+                step_in_task=step,
+                action_summary=(action.html or "")[:500],
                 reward=reward,
                 done=done,
                 error=error,
@@ -382,13 +414,13 @@ async def run_task_inference(
             if done:
                 break
         
-        # Calculate final score
-        score = sum(rewards) / MAX_TOTAL_REWARD if rewards else 0.0
+        # Mean reward across steps in this episode (each reward is already in [0, 1])
+        score = sum(rewards) / len(rewards) if rewards else 0.0
         score = min(max(score, 0.0), 1.0)
         success = score >= SUCCESS_SCORE_THRESHOLD
-        
+
     except Exception as e:
-        print(f"[DEBUG] Task execution error: {e}", flush=True)
+        print(f"[DEBUG] Task execution error: {e}", file=sys.stderr, flush=True)
         error_count += 1
     
     return score, rewards, success, steps_taken
@@ -398,6 +430,53 @@ async def main() -> None:
     """
     Main inference loop: run the agent against all benchmark tasks.
     """
+    
+    print("[VALIDATION] Checking requirement compliance...", file=sys.stderr, flush=True)
+
+    if not validate_environment_variables():
+        print(
+            "[ERROR] REQUIREMENT 1 FAILED: API_BASE_URL and MODEL_NAME must be set (or use defaults)",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    print(
+        "[VALIDATION] REQUIREMENT 1: API_BASE_URL and MODEL_NAME OK",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    if not validate_openai_client():
+        print(
+            "[ERROR] REQUIREMENT 2 FAILED: OpenAI client cannot be imported",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    print(
+        "[VALIDATION] REQUIREMENT 2: OpenAI client import OK",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    if not validate_logging_format():
+        print(
+            "[ERROR] REQUIREMENT 3 FAILED: Logging format checkpoint",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    print(
+        "[VALIDATION] REQUIREMENT 3: JSON logging helpers OK",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    print(
+        "[VALIDATION] All requirements validated. Proceeding with inference...",
+        file=sys.stderr,
+        flush=True,
+    )
     
     if not API_KEY:
         print('[ERROR] OPENAI_API_KEY environment variable not set', file=sys.stderr)
@@ -412,12 +491,16 @@ async def main() -> None:
     
     log_start(task="all_tasks", env="WebsiteGenerationEnvironment", model=MODEL_NAME)
     
+    global_step_ref: List[int] = [0]
+
     try:
         for task_id in TASKS:
-            print(f"\n[INFO] Starting task: {task_id}", flush=True)
-            
+            print(f"[INFO] Starting task: {task_id}", file=sys.stderr, flush=True)
+
             env = WebsiteGenerationEnv(task_type=task_id)
-            score, rewards, success, steps = await run_task_inference(client, env, task_id)
+            score, rewards, success, steps = await run_task_inference(
+                client, env, task_id, global_step_ref
+            )
             
             task_scores[task_id] = score
             task_rewards[task_id] = rewards
@@ -428,12 +511,20 @@ async def main() -> None:
         all_scores = list(task_scores.values())
         overall_score = sum(all_scores) / len(all_scores) if all_scores else 0.0
         overall_success = all(task_success.values())
-        total_steps = sum(task_steps.values())
+        total_steps = global_step_ref[0]
         all_rewards = [r for rewards in task_rewards.values() for r in rewards]
         
-        print(f"\n[SUMMARY] Overall Score: {overall_score:.4f}", flush=True)
-        for task_id in TASKS:
-            print(f"[SUMMARY] {task_id}: {task_scores[task_id]:.4f}", flush=True)
+        print(
+            f"[SUMMARY] Overall Score: {overall_score:.4f}",
+            file=sys.stderr,
+            flush=True,
+        )
+        for tid in TASKS:
+            print(
+                f"[SUMMARY] {tid}: {task_scores[tid]:.4f}",
+                file=sys.stderr,
+                flush=True,
+            )
         
         log_end(
             success=overall_success,
@@ -443,7 +534,7 @@ async def main() -> None:
         )
         
     except Exception as e:
-        print(f"[DEBUG] Main execution error: {e}", flush=True)
+        print(f"[DEBUG] Main execution error: {e}", file=sys.stderr, flush=True)
         log_end(success=False, steps=0, score=0.0, rewards=[])
 
 

@@ -7,6 +7,15 @@ import asyncio
 import sys
 import os
 
+# Windows consoles often use cp1252; avoid Unicode checkmarks in prints.
+def _ok(label: str) -> None:
+    print(f"[PASS] {label}")
+
+
+def _fail(label: str, detail: str = "") -> None:
+    print(f"[FAIL] {label}" + (f" - {detail}" if detail else ""))
+
+
 print('='*70)
 print('FINAL DEPLOYMENT VERIFICATION - ALL 4 TESTS')
 print('='*70)
@@ -19,14 +28,14 @@ print('[1/4] OpenEnv Validate...')
 try:
     result = subprocess.run(['python', 'validate_env.py'], capture_output=True, text=True, timeout=15)
     if 'All validation tests passed' in result.stdout:
-        print('[✓ PASS] OpenEnv Validate')
+        _ok('OpenEnv Validate')
         results['openenv_validate'] = True
     else:
-        print('[✗ FAIL] OpenEnv Validate')
+        _fail('OpenEnv Validate')
         print(result.stdout[-200:] if result.stdout else '')
         results['openenv_validate'] = False
 except Exception as e:
-    print(f'[✗ FAIL] OpenEnv Validate - {e}')
+    _fail('OpenEnv Validate', str(e))
     results['openenv_validate'] = False
 
 # TEST 2: Dockerfile at repo root
@@ -37,14 +46,14 @@ try:
         capture_output=True, text=True, timeout=30
     )
     if result.returncode == 0 and 'OK' in result.stdout:
-        print('[✓ PASS] Dockerfile at repo root')
+        _ok('Dockerfile at repo root')
         results['dockerfile'] = True
     else:
-        print('[✗ FAIL] Dockerfile at repo root')
+        _fail('Dockerfile at repo root')
         print(result.stderr[-200:] if result.stderr else '')
         results['dockerfile'] = False
 except Exception as e:
-    print(f'[✗ FAIL] Dockerfile at repo root - {e}')
+    _fail('Dockerfile at repo root', str(e))
     results['dockerfile'] = False
 
 # TEST 3: inference.py at repo root
@@ -62,13 +71,13 @@ try:
     ]
     
     if all(checks):
-        print('[✓ PASS] inference.py at repo root')
+        _ok('inference.py at repo root')
         results['inference'] = True
     else:
-        print(f'[✗ FAIL] inference.py at repo root - checks: {checks}')
+        _fail('inference.py at repo root', f'checks: {checks}')
         results['inference'] = False
 except Exception as e:
-    print(f'[✗ FAIL] inference.py at repo root - {e}')
+    _fail('inference.py at repo root', str(e))
     import traceback
     traceback.print_exc()
     results['inference'] = False
@@ -88,13 +97,13 @@ try:
         return True
     
     if asyncio.run(test_reset()):
-        print('[✓ PASS] OpenEnv Reset (POST OK)')
+        _ok('OpenEnv Reset (POST OK)')
         results['reset'] = True
     else:
-        print('[✗ FAIL] OpenEnv Reset (POST OK)')
+        _fail('OpenEnv Reset (POST OK)')
         results['reset'] = False
 except Exception as e:
-    print(f'[✗ FAIL] OpenEnv Reset (POST OK) - {e}')
+    _fail('OpenEnv Reset (POST OK)', str(e))
     import traceback
     traceback.print_exc()
     results['reset'] = False
@@ -105,14 +114,14 @@ print('='*70)
 print('SUMMARY')
 print('='*70)
 for test, passed in results.items():
-    status = '✓ PASS' if passed else '✗ FAIL'
-    print(f'{status} - {test}')
+    status = 'PASS' if passed else 'FAIL'
+    print(f'[{status}] {test}')
 
 all_pass = all(results.values())
 print()
 if all_pass:
-    print('✓ ALL 4 TESTS PASSED - READY FOR DEPLOYMENT')
+    print('[PASS] ALL 4 TESTS PASSED - READY FOR DEPLOYMENT')
     sys.exit(0)
 else:
-    print('✗ SOME TESTS FAILED')
+    print('[FAIL] SOME TESTS FAILED')
     sys.exit(1)

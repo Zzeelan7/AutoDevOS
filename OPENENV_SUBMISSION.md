@@ -99,21 +99,13 @@ https://huggingface.co/spaces/Zzeelan7/autodevos-website-generation
 
 ## Logging Format (CRITICAL for evaluation)
 
-Your inference script outputs:
-
-```
-[START] task=simple_landing_page env=autodevos model=gpt-3.5-turbo
-[STEP] step=1 action="<html>..." reward=0.35 done=false error=null
-[STEP] step=2 action="<css>..." reward=0.65 done=false error=null
-[END] success=true steps=2 score=0.50 rewards=0.35,0.65
-```
+Your inference script prints **one JSON object per line on stdout** (diagnostics go to stderr only).
 
 **Rules:**
-- One [START] line per episode
-- One [STEP] line per environment step
-- One [END] line at completion (always emitted)
-- Rewards formatted to 2 decimal places
-- Score in range [0, 1]
+- One `{"event":"START",...}` line at the beginning of the full run
+- One `{"event":"STEP",...}` line per environment step (monotonic `step` across all tasks)
+- One `{"event":"END",...}` line at completion (always emitted on normal or error exit from `main`)
+- `final_score` and per-step `reward` values stay in [0, 1]
 
 ---
 
